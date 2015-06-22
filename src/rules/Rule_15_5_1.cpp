@@ -14,24 +14,24 @@
 
 using namespace clang;
 
-template<typename T>
-Stmt* searchStmt(Stmt *S) {
+template <typename T> Stmt *searchStmt(Stmt *S) {
 
-    Stmt* b {nullptr};
-    if (!S) return b;
-
-    if (isa<T>(S)) {
-        return S;
-    }
-
-    for(auto c: S->children()) {
-        b =  searchStmt<T>(c);
-        if (b) {
-            return b;
-        }
-    }
-
+  Stmt *b{nullptr};
+  if (!S)
     return b;
+
+  if (isa<T>(S)) {
+    return S;
+  }
+
+  for (auto c : S->children()) {
+    b = searchStmt<T>(c);
+    if (b) {
+      return b;
+    }
+  }
+
+  return b;
 }
 
 namespace misracpp2008 {
@@ -39,33 +39,31 @@ namespace misracpp2008 {
 class Rule_15_5_1 : public RuleCheckerASTContext,
                     public RecursiveASTVisitor<Rule_15_5_1> {
 public:
-  Rule_15_5_1() : RuleCheckerASTContext()
-  {}
+  Rule_15_5_1() : RuleCheckerASTContext() {}
 
   bool VisitCXXDestructorDecl(CXXDestructorDecl *D) {
     if (doIgnore(D->getLocStart())) {
       return true;
     }
-    Stmt *t {nullptr}, *p{nullptr};
+    if (!D->isThisDeclarationADefinition()) {
+      return true;
+    }
+
+    Stmt *t{nullptr}, *p{nullptr};
 
     p = D->getBody();
 
     if (p) {
-        // if there's a throw without a catch
-        // this is an error
-        //
-        if(Stmt* throwStmt = searchStmt<CXXThrowExpr>(p)) {
-            t = throwStmt;
-        }
+      if (Stmt *throwStmt = searchStmt<CXXThrowExpr>(p)) {
+        t = throwStmt;
+      }
     }
-    // this dctor throws, now check if exception is catched
-    //
+    // dctor throws, check if there's a catch block
     if (t && p) {
-        auto g = searchStmt<CXXCatchStmt>(p);
-        if (!g) {
-            reportError(t->getLocStart());
-            //reportError(D->getLocStart());
-        }
+      auto g = searchStmt<CXXCatchStmt>(p);
+      if (!g) {
+        reportError(t->getLocStart());
+      }
     }
 
     return true;
